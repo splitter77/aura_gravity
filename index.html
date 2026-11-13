@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,7 +14,7 @@
   }
   body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
 
-  /* Écran d'accueil */
+  /* Home screen */
   #home { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; padding: 24px; }
   #pasteBtn {
     font-size: 22px; font-weight: 600; padding: 18px 48px;
@@ -27,7 +27,7 @@
   #hint { opacity: .6; font-size: 14px; max-width: 360px; }
   #error { color: #ff7b7b; font-size: 14px; min-height: 1em; }
 
-  /* Vue image */
+  /* Image view */
   #viewer { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; cursor: pointer; }
   #stage { position: relative; line-height: 0; }
   #stage img { max-width: 100vw; max-height: 100vh; display: block; user-select: none; -webkit-user-drag: none; }
@@ -51,8 +51,8 @@
 <body>
 
 <div id="home">
-  <button id="pasteBtn">📋 Coller</button>
-  <div id="hint">Copie une capture d'écran, puis clique sur « Coller » (ou fais Ctrl/⌘ + V).</div>
+  <button id="pasteBtn">📋 Paste</button>
+  <div id="hint">Copy a screenshot, then click “Paste” (or press Ctrl/⌘ + V).</div>
   <div id="error"></div>
 </div>
 
@@ -65,9 +65,9 @@
 const $ = (id) => document.getElementById(id);
 const home = $('home'), viewer = $('viewer'), stage = $('stage'), img = $('img');
 
-let currentImage = null; // HTMLImageElement chargée
+let currentImage = null; // loaded HTMLImageElement
 
-/* ---------- Récupération du presse-papier ---------- */
+/* ---------- Reading the clipboard ---------- */
 
 $('pasteBtn').addEventListener('click', async () => {
   $('error').textContent = '';
@@ -78,15 +78,15 @@ $('pasteBtn').addEventListener('click', async () => {
       const type = item.types.find((t) => t.startsWith('image/'));
       if (type) return loadFromBlob(await item.getType(type));
     }
-    $('error').textContent = "Aucune image dans le presse-papier.";
+    $('error').textContent = "No image in the clipboard.";
   } catch (e) {
     $('error').textContent = e.message === 'unsupported'
-      ? "Ton navigateur ne permet pas la lecture directe : utilise Ctrl/⌘ + V."
-      : "Accès au presse-papier refusé. Essaie Ctrl/⌘ + V.";
+      ? "Your browser doesn't support reading the clipboard directly: use Ctrl/⌘ + V."
+      : "Clipboard access denied. Try Ctrl/⌘ + V.";
   }
 });
 
-// Fallback : Ctrl/⌘ + V n'importe quand
+// Fallback: Ctrl/⌘ + V at any time
 window.addEventListener('paste', (e) => {
   const file = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))?.getAsFile();
   if (file) { e.preventDefault(); loadFromBlob(file); }
@@ -103,15 +103,15 @@ function loadFromBlob(blob) {
     stage.classList.remove('blurred');
     runDetection();
   };
-  im.onerror = () => { $('error').textContent = "Impossible de lire l'image."; };
+  im.onerror = () => { $('error').textContent = "Unable to read the image."; };
   im.src = url;
 }
 window.loadFromBlob = loadFromBlob;
 
-/* ---------- Détection des icônes ---------- */
+/* ---------- Icon detection ---------- */
 
 function detectIcons(image) {
-  // 1. Réduction pour l'analyse
+  // 1. Downscale for analysis
   const MAX = 1000;
   const scale = Math.min(1, MAX / Math.max(image.naturalWidth, image.naturalHeight));
   const W = Math.max(1, Math.round(image.naturalWidth * scale));
@@ -123,7 +123,7 @@ function detectIcons(image) {
   const px = ctx.getImageData(0, 0, W, H).data;
   const N = W * H, minDim = Math.min(W, H);
 
-  // 2. Force des contours (gradient couleur) + carte des pixels colorés
+  // 2. Edge strength (color gradient) + map of colored pixels
   const grad = new Uint16Array(N), color = new Uint8Array(N);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -154,9 +154,9 @@ function detectIcons(image) {
     b.w >= minSide && b.h >= minSide && b.w <= maxSide && b.h <= maxSide &&
     b.w / b.h >= 0.8 && b.w / b.h <= 1.25;
 
-  // 3. Analyse multi-seuils (icônes peu contrastées) et multi-échelles :
-  //    petite dilatation = garde l'icône séparée de son texte,
-  //    grande dilatation = réunit les morceaux d'une icône "en traits".
+  // 3. Multi-threshold (low-contrast icons) and multi-scale analysis:
+  //    small dilation = keeps the icon separate from its label,
+  //    large dilation = joins the pieces of a line-art icon.
   const unit = Math.max(1, minDim / 500);
   const radii = [...new Set([1, 2, 3, 5, 8].map((r) => Math.max(1, Math.round(r * unit))))];
   const candidates = [];
@@ -173,29 +173,29 @@ function detectIcons(image) {
         if (!isIconShape(b)) continue;
         const area = b.w * b.h;
         const edges = sumIn(edgeSum, b);
-        if (edges < (b.w + b.h) * 0.9) continue;          // trop vide
-        if (edges > area * 0.55) continue;                 // texture / bruit
+        if (edges < (b.w + b.h) * 0.9) continue;          // too empty
+        if (edges > area * 0.55) continue;                 // texture / noise
         const colorful = sumIn(colorSum, b) / area;
-        // Rejet du texte : une lettre a des voisines de même hauteur, alignées et très proches.
+        // Text rejection: a letter has neighbors of the same height, aligned and very close.
         if (colorful < 0.15 && looksLikeText(b, boxes)) continue;
         candidates.push(b);
       }
     }
   }
 
-  // 4. Fusion des candidats des différentes échelles
-  const squareness = (b) => Math.min(b.w, b.h) / Math.max(b.w, b.h); // 1 = carré parfait
+  // 4. Merge candidates from the different scales
+  const squareness = (b) => Math.min(b.w, b.h) / Math.max(b.w, b.h); // 1 = perfect square
   candidates.sort((a, b) => a.w * a.h - b.w * b.h);
   const kept = [];
   for (const c of candidates) {
     const dupe = kept.findIndex((k) => iou(c, k) > 0.6);
     if (dupe === -1) kept.push(c);
-    else if (squareness(c) > squareness(kept[dupe]) + 0.03) kept[dupe] = c; // on garde la plus carrée
+    else if (squareness(c) > squareness(kept[dupe]) + 0.03) kept[dupe] = c; // keep the squarest
   }
-  // Grandes boîtes d'abord :
-  //  - englobe plusieurs icônes → groupe fusionné, on la jette ;
-  //  - englobe une seule boîte presque aussi grande mais plus carrée (icône + texte) → on jette l'englobante ;
-  //  - sinon c'est une icône, et ce qu'elle contient (son dessin intérieur) est ignoré.
+  // Large boxes first:
+  //  - contains several icons → merged group, drop it;
+  //  - contains a single box almost as large but squarer (icon + label) → drop the enclosing one;
+  //  - otherwise it's an icon, and what it contains (its inner artwork) is ignored.
   kept.sort((a, b) => b.w * b.h - a.w * a.h);
   const final = [];
   for (const c of kept) {
@@ -208,23 +208,23 @@ function detectIcons(image) {
     final.push(c);
   }
 
-  // 5. Écran d'accueil ? On cherche une grille régulière d'icônes de même taille.
-  //    C'est bien plus fiable sur un fond d'écran photo que l'analyse ci-dessus.
+  // 5. Home screen? Look for a regular grid of same-size icons.
+  //    Much more reliable on a photo wallpaper than the analysis above.
   const grid = detectGrid(px, grad, W, H);
   const boxes = grid || final;
 
-  // 6. Boîtes carrées avec une petite marge, en coordonnées relatives (0..1)
+  // 6. Square boxes with a small margin, in relative coordinates (0..1)
   const rel = (x, y, w, h) => ({ x: x / W, y: y / H, w: w / W, h: h / H });
   const out = boxes.map((b) => {
-    // marge : quelques % + 2 pixels d'analyse (≈ 2 à 4 px réels) pour ne rien laisser dépasser
+    // margin: a few % + 2 analysis pixels (≈ 2 to 4 real px) so nothing sticks out
     const s = Math.max(b.w, b.h) * (grid ? 1.06 : 1.12) + 4;
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    // découpe : au ras de l'icône (pour qu'elle ne emporte pas de fond d'écran en tombant)
+    // cut: flush with the icon (so it doesn't take wallpaper with it when falling)
     const c = grid ? Math.max(b.w, b.h) + 1 : s;
     return { ...rel(cx - s / 2, cy - s / 2, s, s), cut: rel(cx - c / 2, cy - c / 2, c, c) };
   });
 
-  // 7. Pastilles de notification (rouges, en haut à droite de l'icône)
+  // 7. Notification badges (red, top right of the icon)
   boxes.forEach((b, i) => {
     const badge = findBadge(px, W, H, b);
     if (badge) {
@@ -243,7 +243,7 @@ function findBadge(px, W, H, icon) {
     const i = (y * W + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2];
     return r > 170 && r - g > 90 && r - b > 80;
   };
-  // départ : pixels rouges situés hors de l'icône (au-dessus ou à droite), pour ne pas confondre avec un dessin rouge de l'icône
+  // seed: red pixels outside the icon (above or to the right), so as not to confuse with red icon artwork
   const seen = new Uint8Array((x1 - x0 + 1) * (y1 - y0 + 1));
   const idx = (x, y) => (y - y0) * (x1 - x0 + 1) + (x - x0);
   const stack = [];
@@ -264,16 +264,16 @@ function findBadge(px, W, H, icon) {
     }
   }
   const w = maxX - minX + 1, h = maxY - minY + 1;
-  if (h < 0.12 * s || h > 0.6 * s || w > 1.2 * s) return null; // pas une pastille
-  if (maxX >= x1 || minY <= y0) return null; // touche le bord de la zone : c'est autre chose (icône voisine…)
+  if (h < 0.12 * s || h > 0.6 * s || w > 1.2 * s) return null; // not a badge
+  if (maxX >= x1 || minY <= y0) return null; // touches the edge of the zone: it's something else (neighboring icon…)
   const pad = 0.15 * h + 2;
   return { x: minX - pad, y: minY - pad, w: w + 2 * pad, h: h + 2 * pad };
 }
 
-/* ---------- Mode grille (écran d'accueil) ---------- */
+/* ---------- Grid mode (home screen) ---------- */
 
-// Score d'un carré : part des points de chaque côté (partie droite, hors coins arrondis)
-// qui tombent sur un contour. On garde le plus faible des 4 côtés.
+// Score of a square: share of points on each side (straight part, excluding rounded corners)
+// that land on an edge. Keep the weakest of the 4 sides.
 function sideScore(m, W, x, y, s) {
   const n = 10;
   let min = 1;
@@ -291,7 +291,7 @@ function sideScore(m, W, x, y, s) {
   return min;
 }
 
-// Intérieur près du bord uniforme (fond de l'icône) et différent de l'extérieur.
+// Interior near the edge is uniform (icon background) and different from the outside.
 function ringScore(px, W, H, x, y, s) {
   const n = 10, ins = Math.max(2, Math.round(s * 0.1)), ou = Math.max(2, Math.round(s * 0.06));
   const inC = [], outC = [];
@@ -314,10 +314,10 @@ function ringScore(px, W, H, x, y, s) {
 function detectGrid(px, grad, W, H) {
   const N = W * H, minDim = Math.min(W, H);
   const edgeMap = (T, R) => { const e = new Uint8Array(N); for (let p = 0; p < N; p++) e[p] = grad[p] > T ? 1 : 0; return dilate(e, W, H, R); };
-  // contours épaissis : tolère un pas de balayage grossier
+  // thickened edges: tolerates a coarse scan step
   const m = edgeMap(24, Math.max(2, Math.round(minDim / 200)));
 
-  // a) Icônes "sûres" : carrés aux 4 côtés nets, bord intérieur uniforme, contraste avec l'extérieur.
+  // a) "Confident" icons: squares with 4 sharp sides, uniform inner edge, contrast with the outside.
   const seeds = [];
   for (let S = minDim * 0.06; S <= minDim * 0.3; S *= 1.04) {
     const s = Math.round(S), step = Math.max(1, Math.round(s / 16));
@@ -333,9 +333,9 @@ function detectGrid(px, grad, W, H) {
   const strong = [];
   for (const c of seeds) if (!strong.some((k) => iou(c, k) > 0.3)) strong.push(c);
 
-  // b) Taille dominante (on ignore les petits carrés contenus dans un plus grand, ex. mini-icônes d'un dossier)
+  // b) Dominant size (ignore small squares contained in a larger one, e.g. a folder's mini-icons)
   const outer = strong.filter((c) => !strong.some((k) => k.w > c.w * 1.3 && overlap(c, k) > 0.7 * c.w * c.h));
-  // pour chaque taille possible, on mesure à quel point les carrés forment une grille (colonnes ET rangées partagées)
+  // for each candidate size, measure how well the squares form a grid (shared columns AND rows)
   const cluster = (vals, tol) => {
     vals = [...vals].sort((a, b) => a - b);
     const out = [];
@@ -359,15 +359,15 @@ function detectGrid(px, grad, W, H) {
   if (best.length < 5) return null;
   const S = best.map((b) => b.w).sort((a, b) => a - b)[best.length >> 1];
 
-  // c) Colonnes (au moins 2 icônes sûres) et rangées
+  // c) Columns (at least 2 confident icons) and rows
   const tol = 0.4 * S;
   const colCl = cluster(best.map((b) => b.x + b.w / 2), tol);
   let cols = colCl.filter((c) => c.n >= 2).map((c) => c.c);
-  // une rangée peut ne contenir qu'une icône sûre (ex. le dock), si celle-ci est dans une colonne connue
+  // a row may contain just one confident icon (e.g. the dock), if it's in a known column
   const onCol = best.filter((b) => cols.some((c) => Math.abs(c - (b.x + b.w / 2)) < tol));
   let rows = cluster(onCol.map((b) => b.y + b.h / 2), tol).map((c) => c.c);
   if (cols.length < 2 || rows.length < 2) return null;
-  // colonnes / rangées manquantes : on teste aussi un pas de grille avant/après et dans les trous
+  // missing columns / rows: also try one grid pitch before/after and in the gaps
   const extend = (lines, max) => {
     if (lines.length < 2) return lines;
     const pitch = Math.min(...lines.slice(1).map((v, i) => v - lines[i]));
@@ -380,7 +380,7 @@ function detectGrid(px, grad, W, H) {
   cols = extend(cols.sort((a, b) => a - b), W);
   rows = extend(rows.sort((a, b) => a - b), H);
 
-  // d) Vérification de chaque case, avec un léger recalage
+  // d) Check each cell, with a slight realignment
   const mLow = edgeMap(14, 1);
   const found = [];
   const r = Math.round(0.2 * S);
@@ -460,7 +460,7 @@ function iou(a, b) {
 }
 
 function dilate(src, W, H, R) {
-  // dilatation carrée séparable via sommes glissantes
+  // separable square dilation via sliding sums
   const tmp = new Uint8Array(W * H), out = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) {
     let sum = 0;
@@ -490,9 +490,9 @@ function overlap(a, b) {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-/* ---------- Affichage ---------- */
+/* ---------- Display ---------- */
 
-let pieces = [];      // une pièce = une icône découpée (+ sa pastille), qui bouge d'un bloc
+let pieces = [];      // a piece = one cut-out icon (+ its badge), moving as a unit
 let state = 'idle';   // idle → falling → fallen → returning → idle
 let engine = null, rafId = 0;
 
@@ -507,7 +507,7 @@ function runDetection() {
     left: b.x * 100 + '%', top: b.y * 100 + '%', width: b.w * 100 + '%', height: b.h * 100 + '%',
   });
 
-  // zones floutées (visibles quand l'icône est partie)
+  // blurred areas (visible once the icon has left)
   for (const b of icons) {
     const el = document.createElement('div');
     el.className = b.badge ? 'icon-box badge' : 'icon-box';
@@ -515,7 +515,7 @@ function runDetection() {
     stage.appendChild(el);
   }
 
-  // découpe de chaque icône dans l'image d'origine
+  // cut each icon out of the original image
   const nw = currentImage.naturalWidth, nh = currentImage.naturalHeight;
   const cutOut = (c, badge) => {
     const cv = document.createElement('canvas');
@@ -533,7 +533,7 @@ function runDetection() {
     const icon = cutOut(b.cut);
     Object.assign(icon.style, { left: 0, top: 0, width: '100%', height: '100%' });
     el.appendChild(icon);
-    // pastille : placée en relatif dans la pièce, elle tourne avec l'icône
+    // badge: positioned relative to the piece, it rotates with the icon
     for (const g of icons.filter((k) => k.badge && k.of === i)) {
       const cv = cutOut(g.cut, true);
       Object.assign(cv.style, {
@@ -547,7 +547,7 @@ function runDetection() {
   });
 }
 
-/* ---------- Physique : chute aléatoire, rotation, collisions ---------- */
+/* ---------- Physics: random fall, rotation, collisions ---------- */
 
 function stopPhysics() {
   cancelAnimationFrame(rafId);
@@ -560,9 +560,9 @@ function dropAll() {
   stage.classList.add('blurred');
   const W = stage.clientWidth, H = stage.clientHeight;
   engine = Engine.create();
-  engine.gravity.y = 1.4 * (H / 900);   // gravité proportionnelle à la taille d'affichage
+  engine.gravity.y = 1.4 * (H / 900);   // gravity proportional to the display size
 
-  // sol et murs aux bords de l'image
+  // floor and walls at the image edges
   const t = 200;
   Composite.add(engine.world, [
     Bodies.rectangle(W / 2, H + t / 2, W * 3, t, { isStatic: true, friction: 0.8 }),
@@ -570,7 +570,7 @@ function dropAll() {
     Bodies.rectangle(W + t / 2, H / 2, t, H * 4, { isStatic: true }),
   ]);
 
-  // un corps par icône, immobile tant qu'elle n'est pas lâchée (les autres peuvent rebondir dessus)
+  // one body per icon, static until released (others can bounce off it)
   for (const p of pieces) {
     const w = p.b.w * W, h = p.b.h * H;
     p.x0 = p.b.x * W + w / 2; p.y0 = p.b.y * H + h / 2;
@@ -581,7 +581,7 @@ function dropAll() {
     Composite.add(engine.world, p.body);
   }
 
-  // ordre et rythme aléatoires
+  // random order and timing
   const order = [...pieces].sort(() => Math.random() - 0.5);
   let delay = 0;
   order.forEach((p, i) => {
@@ -613,7 +613,7 @@ function bringBack() {
   pieces.forEach((p) => clearTimeout(p.timer));
   const anims = [...pieces].sort(() => Math.random() - 0.5).map((p, i) => {
     const { x, y } = p.body.position;
-    // on ramène l'angle entre -180° et 180° pour un retour sans tour complet
+    // bring the angle back between -180° and 180° so the return doesn't spin a full turn
     const a = Math.atan2(Math.sin(p.body.angle), Math.cos(p.body.angle));
     const from = `translate(${x - p.x0}px, ${y - p.y0}px) rotate(${a}rad)`;
     p.el.style.transform = '';
@@ -627,7 +627,7 @@ function bringBack() {
   });
 }
 
-// Toucher l'écran → les icônes tombent / reviennent
+// Tap the screen → icons fall / come back
 viewer.addEventListener('click', () => {
   if (!pieces.length || typeof Matter === 'undefined') return;
   if (state === 'idle') dropAll();
